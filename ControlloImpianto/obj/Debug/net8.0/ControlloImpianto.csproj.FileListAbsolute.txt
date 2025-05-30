@@ -21,3 +21,4 @@ C:\Users\Matteo Didonè\OneDrive\Desktop\simulazione-esame\ControlloImpianto\obj
 C:\Users\Matteo Didonè\OneDrive\Desktop\simulazione-esame\ControlloImpianto\obj\Debug\net8.0\ControlloImpianto.pdb
 C:\Users\Matteo Didonè\OneDrive\Desktop\simulazione-esame\ControlloImpianto\obj\Debug\net8.0\ControlloImpianto.genruntimeconfig.cache
 C:\Users\Matteo Didonè\OneDrive\Desktop\simulazione-esame\ControlloImpianto\obj\Debug\net8.0\ref\ControlloImpianto.dll
+C:\Users\Matteo Didonè\OneDrive\Desktop\simulazione-esame\ControlloImpianto\obj\Debug\net8.0\ControlloImpianto.sourcelink.json

@@ -14,9 +14,9 @@ namespace ControlloImpianto
             
             try
             {
-                // Parti dal nodo Objects
+                // Parti dal nodo Objects - AUMENTATO maxLevel da 3 a 4!
                 var objectsNode = new NodeId(Objects.ObjectsFolder);
-                await EsploraRicorsivo(session, objectsNode, "", nodeIds, 0, 3);
+                await EsploraRicorsivo(session, objectsNode, "", nodeIds, 0, 4);
             }
             catch (Exception ex)
             {
@@ -52,10 +52,22 @@ namespace ControlloImpianto
                 
                 Console.WriteLine($"{indent}{browseName} ({displayName}) [{nodeClass}] - NodeId: {nodeId}");
                 
-                // Se è una variabile, salvala nel dizionario
+                // Se è una variabile, salvala nel dizionario CON ENTRAMBE LE CHIAVI
                 if (nodeClass == NodeClass.Variable)
                 {
                     nodeIds[currentPath] = nodeId;
+                    
+                    // AGGIUNTO: Salva anche con NodeId semplificato per compatibilità
+                    var nodeIdStr = nodeId.ToString();
+                    if (nodeIdStr.Contains(";s="))
+                    {
+                        var simpleKey = nodeIdStr.Split(";s=")[1]; // Es: "Acceso1"
+                        if (!nodeIds.ContainsKey(simpleKey))
+                        {
+                            nodeIds[simpleKey] = nodeId;
+                            Console.WriteLine($"{indent}  🔑 Chiave aggiuntiva: {simpleKey}");
+                        }
+                    }
                     
                     // Prova a leggere il valore
                     try

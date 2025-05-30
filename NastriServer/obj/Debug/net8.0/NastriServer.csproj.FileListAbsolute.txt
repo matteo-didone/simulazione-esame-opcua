@@ -28,3 +28,4 @@ C:\Users\Matteo Didonè\OneDrive\Desktop\simulazione-esame\NastriServer\bin\Debu
 C:\Users\Matteo Didonè\OneDrive\Desktop\simulazione-esame\NastriServer\bin\Debug\net8.0\Microsoft.Extensions.DependencyInjection.Abstractions.dll
 C:\Users\Matteo Didonè\OneDrive\Desktop\simulazione-esame\NastriServer\bin\Debug\net8.0\Microsoft.Extensions.Logging.Abstractions.dll
 C:\Users\Matteo Didonè\OneDrive\Desktop\simulazione-esame\NastriServer\bin\Debug\net8.0\System.Formats.Asn1.dll
+C:\Users\Matteo Didonè\OneDrive\Desktop\simulazione-esame\NastriServer\obj\Debug\net8.0\NastriServer.sourcelink.json

@@ -2,24 +2,25 @@ using Opc.Ua;
 using Opc.Ua.Server;
 using RiempitriceServer.Models;
 using Shared;
+using Shared.CustomTypes;
 
 namespace RiempitriceServer.Services
 {
     /// <summary>
-    /// Server OPC-UA per la riempitrice
+    /// Server OPC-UA Enhanced per la riempitrice con template professionali
     /// </summary>
     public class RiempitriceOpcServer : StandardServer
     {
         private Riempitrice riempitrice = new();
         private Timer? updateTimer;
-        private RiempitriceNodeManager? nodeManager;
+        private EnhancedRiempitriceNodeManager? nodeManager;
 
         protected override MasterNodeManager CreateMasterNodeManager(IServerInternal server, ApplicationConfiguration configuration)
         {
-            Console.WriteLine("Creazione del NodeManager per Riempitrice...");
+            Console.WriteLine("Creazione del NodeManager Enhanced per Riempitrice...");
 
-            // Crea il node manager personalizzato
-            nodeManager = new RiempitriceNodeManager(server, configuration, riempitrice);
+            // Crea il node manager enhanced
+            nodeManager = new EnhancedRiempitriceNodeManager(server, configuration, riempitrice);
             var masterNodeManager = new MasterNodeManager(server, configuration, null, nodeManager);
 
             // Avvia il timer per aggiornare i dati ogni 2 secondi
@@ -39,7 +40,7 @@ namespace RiempitriceServer.Services
             // Log periodico dello stato
             if (DateTime.Now.Second % 10 == 0) // Ogni 10 secondi
             {
-                Console.WriteLine("=== Stato Riempitrice ===");
+                Console.WriteLine("=== Stato Riempitrice Enhanced ===");
                 Console.WriteLine($"  {riempitrice}");
             }
         }
@@ -55,19 +56,18 @@ namespace RiempitriceServer.Services
     }
 
     /// <summary>
-    /// NodeManager per gestire i nodi della riempitrice
+    /// NodeManager Enhanced con Template Professionali per la riempitrice
     /// </summary>
-    public class RiempitriceNodeManager : CustomNodeManager2
+    public class EnhancedRiempitriceNodeManager : CustomNodeManager2
     {
         private Riempitrice riempitrice;
         private Dictionary<string, BaseDataVariableState> variables = new();
+        private BaseObjectState? riempitriceInstance;
 
-        public RiempitriceNodeManager(IServerInternal server, ApplicationConfiguration configuration, Riempitrice riempitrice)
+        public EnhancedRiempitriceNodeManager(IServerInternal server, ApplicationConfiguration configuration, Riempitrice riempitrice)
             : base(server, configuration, "http://mvlabs.it/riempitrice")
         {
             this.riempitrice = riempitrice;
-            
-            // Imposta i namespace
             SetNamespaces("http://mvlabs.it/riempitrice");
         }
 
@@ -77,94 +77,255 @@ namespace RiempitriceServer.Services
             {
                 LoadPredefinedNodes(SystemContext, externalReferences);
 
-                // Crea il nodo radice "Riempitrice"
-                FolderState riempitriceFolder = new FolderState(null);
-                riempitriceFolder.NodeId = new NodeId("Riempitrice", NamespaceIndex);
-                riempitriceFolder.BrowseName = new QualifiedName("Riempitrice", NamespaceIndex);
-                riempitriceFolder.DisplayName = new LocalizedText("en", "Riempitrice");
-                riempitriceFolder.TypeDefinitionId = ObjectTypeIds.FolderType;
-
-                // Aggiungi riferimento al nodo Objects
-                IList<IReference>? references = null;
-                if (!externalReferences.TryGetValue(ObjectIds.ObjectsFolder, out references))
-                {
-                    externalReferences[ObjectIds.ObjectsFolder] = references = new List<IReference>();
-                }
-
-                riempitriceFolder.AddReference(ReferenceTypes.Organizes, true, ObjectIds.ObjectsFolder);
-                references.Add(new NodeStateReference(ReferenceTypes.Organizes, false, riempitriceFolder.NodeId));
-
-                // Crea i nodi per la riempitrice
-                CreateRiempitriceNodes(riempitriceFolder);
-
-                // Aggiungi tutto all'address space
-                AddPredefinedNode(SystemContext, riempitriceFolder);
+                // Crea l'istanza della riempitrice usando i template professionali
+                CreateRiempitriceInstance(externalReferences);
             }
         }
 
-        private void CreateRiempitriceNodes(FolderState parent)
+        private void CreateRiempitriceInstance(IDictionary<NodeId, IList<IReference>> externalReferences)
         {
-            // Variabili di stato (read-only)
-            CreateRiempitriceVariable(parent, "Stato", "Stato", DataTypeIds.Int32);
-            CreateRiempitriceVariable(parent, "RicettaInUso", "RicettaInUso", DataTypeIds.String);
-            CreateRiempitriceVariable(parent, "ConsumoElettrico", "ConsumoElettrico", DataTypeIds.Float);
-            CreateRiempitriceVariable(parent, "ContatoreBottiglieRiempite", "ContatoreBottiglieRiempite", DataTypeIds.UInt32);
+            // Crea l'istanza principale della riempitrice usando il template professionale
+            riempitriceInstance = IndustrialComponentTemplates.CreateProfessionalRiempitrice(null, riempitrice.Nome, NamespaceIndex);
 
-            // Variabili di controllo (read/write)
-            CreateRiempitriceVariable(parent, "Accesa", "Accesa", DataTypeIds.Boolean, true);
-
-            // Array delle ricette disponibili (read-only)
-            CreateRiempitriceVariable(parent, "RicetteDisponibili", "RicetteDisponibili", DataTypeIds.String, false, true);
-
-            // Metodo per cambiare ricetta (write-only)
-            CreateRiempitriceVariable(parent, "CambiaRicetta", "CambiaRicetta", DataTypeIds.String, true);
-        }
-
-        private BaseDataVariableState CreateRiempitriceVariable(NodeState parent, string nodeId, string name, NodeId dataType, bool writable = false, bool isArray = false)
-        {
-            var variable = new BaseDataVariableState(parent);
-            variable.NodeId = new NodeId(nodeId, NamespaceIndex);
-            variable.BrowseName = new QualifiedName(name, NamespaceIndex);
-            variable.DisplayName = new LocalizedText("en", name);
-            variable.TypeDefinitionId = VariableTypeIds.BaseDataVariableType;
-            variable.DataType = dataType;
-            variable.ValueRank = isArray ? ValueRanks.OneDimension : ValueRanks.Scalar;
-            variable.AccessLevel = writable ? AccessLevels.CurrentReadOrWrite : AccessLevels.CurrentRead;
-            variable.UserAccessLevel = writable ? AccessLevels.CurrentReadOrWrite : AccessLevels.CurrentRead;
-            variable.Historizing = false;
-            variable.Value = GetDefaultValue(dataType, isArray);
-            variable.StatusCode = StatusCodes.Good;
-            variable.Timestamp = DateTime.UtcNow;
-
-            if (writable)
+            // Aggiungi riferimento al nodo Objects
+            if (!externalReferences.TryGetValue(ObjectIds.ObjectsFolder, out var references))
             {
-                variable.OnWriteValue = OnWriteValue;
+                externalReferences[ObjectIds.ObjectsFolder] = references = new List<IReference>();
             }
 
-            parent.AddChild(variable);
+            riempitriceInstance.AddReference(ReferenceTypes.Organizes, true, ObjectIds.ObjectsFolder);
+            references.Add(new NodeStateReference(ReferenceTypes.Organizes, false, riempitriceInstance.NodeId));
 
-            // Salva la variabile per gli aggiornamenti
-            variables[name] = variable;
-            
-            return variable;
+            // Registra le variabili per gli aggiornamenti
+            RegisterRiempitriceVariables();
+
+            // Aggiungi all'address space
+            AddPredefinedNode(SystemContext, riempitriceInstance);
         }
 
-        private object GetDefaultValue(NodeId dataType, bool isArray = false)
+        private void RegisterRiempitriceVariables()
         {
-            if (isArray && dataType == DataTypeIds.String)
-            {
-                return riempitrice.RicetteDisponibili.ToArray();
-            }
-            
-            if (dataType == DataTypeIds.Boolean) return false;
-            if (dataType == DataTypeIds.Int32) return 0;
-            if (dataType == DataTypeIds.UInt32) return (uint)0;
-            if (dataType == DataTypeIds.Float) return 0.0f;
-            if (dataType == DataTypeIds.String) return string.Empty;
-            return 0;
+            if (riempitriceInstance == null) return;
+
+            // Crea le variabili professionali direttamente e le registra
+            CreateRiempitriceVariables();
         }
 
-        private ServiceResult OnWriteValue(ISystemContext context, NodeState node, NumericRange indexRange, QualifiedName dataEncoding, ref object value, ref StatusCode statusCode, ref DateTime timestamp)
+        private void CreateRiempitriceVariables()
+        {
+            if (riempitriceInstance == null) return;
+
+            // === CARTELLA PARAMETRI ===
+            var parametriFolder = ProfessionalNodeCreator.CreateProfessionalFolder(
+                riempitriceInstance,
+                "Riempitrice_Parametri",
+                "Parametri",
+                "Parametri Operativi",
+                "Parametri di stato e configurazione della riempitrice",
+                NamespaceIndex
+            );
+
+            // Stato
+            var statoVar = ProfessionalNodeCreator.CreateProfessionalVariable(
+                parametriFolder,
+                "Stato",
+                "Stato",
+                "Stato Operativo",
+                "Stato corrente: 0=Spenta, 1=Accesa, 2=InFunzione, 3=InAllarme",
+                DataTypeIds.Int32,
+                NamespaceIndex,
+                writable: false,
+                defaultValue: 0
+            );
+            variables["Stato"] = statoVar;
+
+            // Ricetta in Uso
+            var ricettaVar = ProfessionalNodeCreator.CreateProfessionalVariable(
+                parametriFolder,
+                "RicettaInUso",
+                "RicettaInUso",
+                "Ricetta Attiva",
+                "Nome della ricetta di produzione attualmente in uso",
+                DataTypeIds.String,
+                NamespaceIndex,
+                writable: false,
+                defaultValue: "Nessuna"
+            );
+            variables["RicettaInUso"] = ricettaVar;
+
+            // Velocità Riempimento
+            var velocitaRiempimentoVar = ProfessionalNodeCreator.CreateProfessionalVariable(
+                parametriFolder,
+                "VelocitaRiempimento",
+                "VelocitaRiempimento",
+                "Velocità Riempimento",
+                "Velocità di riempimento delle bottiglie",
+                DataTypeIds.Float,
+                NamespaceIndex,
+                writable: true,
+                unit: "bot/min",
+                minValue: 0.0,
+                maxValue: 200.0,
+                defaultValue: 0.0f
+            );
+            variables["VelocitaRiempimento"] = velocitaRiempimentoVar;
+
+            // Consumo Elettrico
+            var consumoVar = ProfessionalNodeCreator.CreateProfessionalVariable(
+                parametriFolder,
+                "ConsumoElettrico",
+                "ConsumoElettrico",
+                "Consumo Elettrico",
+                "Consumo elettrico istantaneo della riempitrice",
+                DataTypeIds.Float,
+                NamespaceIndex,
+                writable: false,
+                unit: "kW",
+                minValue: 0.0,
+                maxValue: 100.0,
+                defaultValue: 0.0f
+            );
+            variables["ConsumoElettrico"] = consumoVar;
+
+            // Contatore Bottiglie Riempite
+            var contatoreVar = ProfessionalNodeCreator.CreateProfessionalVariable(
+                parametriFolder,
+                "ContatoreBottiglieRiempite",
+                "ContatoreBottiglieRiempite",
+                "Bottiglie Riempite",
+                "Numero totale di bottiglie riempite",
+                DataTypeIds.UInt32,
+                NamespaceIndex,
+                writable: false,
+                unit: "pz",
+                defaultValue: (uint)0
+            );
+            variables["ContatoreBottiglieRiempite"] = contatoreVar;
+
+            // === CARTELLA RICETTE ===
+            var ricetteFolder = ProfessionalNodeCreator.CreateProfessionalFolder(
+                riempitriceInstance,
+                "Riempitrice_Ricette",
+                "Ricette",
+                "Gestione Ricette",
+                "Configurazione e gestione delle ricette di produzione",
+                NamespaceIndex
+            );
+
+            // Ricette Disponibili
+            var ricetteDisponibiliVar = ProfessionalNodeCreator.CreateProfessionalVariable(
+                ricetteFolder,
+                "RicetteDisponibili",
+                "RicetteDisponibili",
+                "Ricette Disponibili",
+                "Elenco delle ricette di produzione disponibili",
+                DataTypeIds.String,
+                NamespaceIndex,
+                writable: false,
+                defaultValue: riempitrice.RicetteDisponibili.ToArray()
+            );
+            ricetteDisponibiliVar.ValueRank = ValueRanks.OneDimension;
+            variables["RicetteDisponibili"] = ricetteDisponibiliVar;
+
+            // === CARTELLA CONTROLLO ===
+            var controlloFolder = ProfessionalNodeCreator.CreateProfessionalFolder(
+                riempitriceInstance,
+                "Riempitrice_Controllo",
+                "Controllo",
+                "Comandi di Controllo",
+                "Interfaccia per il controllo della riempitrice",
+                NamespaceIndex
+            );
+
+            // Accesa (comando)
+            var accesaVar = ProfessionalNodeCreator.CreateProfessionalVariable(
+                controlloFolder,
+                "Accesa",
+                "Accesa",
+                "Comando Accensione",
+                "Comando per accendere/spegnere la riempitrice",
+                DataTypeIds.Boolean,
+                NamespaceIndex,
+                writable: true,
+                defaultValue: false
+            );
+            accesaVar.OnWriteValue = OnWriteValue;
+            variables["Accesa"] = accesaVar;
+
+            // Cambia Ricetta (comando)
+            var cambiaRicettaVar = ProfessionalNodeCreator.CreateProfessionalVariable(
+                controlloFolder,
+                "CambiaRicetta",
+                "CambiaRicetta",
+                "Comando Cambio Ricetta",
+                "Imposta una nuova ricetta di produzione",
+                DataTypeIds.String,
+                NamespaceIndex,
+                writable: true,
+                defaultValue: string.Empty
+            );
+            cambiaRicettaVar.OnWriteValue = OnWriteValue;
+            variables["CambiaRicetta"] = cambiaRicettaVar;
+
+            // === CARTELLA DIAGNOSTICA ===
+            var diagnosticaFolder = ProfessionalNodeCreator.CreateProfessionalFolder(
+                riempitriceInstance,
+                "Riempitrice_Diagnostica",
+                "Diagnostica",
+                "Informazioni Diagnostiche",
+                "Dati per manutenzione e diagnostica della riempitrice",
+                NamespaceIndex
+            );
+
+            // Tempo Funzionamento
+            var tempoFunzionamentoVar = ProfessionalNodeCreator.CreateProfessionalVariable(
+                diagnosticaFolder,
+                "TempoFunzionamento",
+                "TempoFunzionamento",
+                "Ore di Funzionamento",
+                "Tempo totale di funzionamento della riempitrice",
+                DataTypeIds.Double,
+                NamespaceIndex,
+                writable: false,
+                unit: "h",
+                defaultValue: 0.0
+            );
+            variables["TempoFunzionamento"] = tempoFunzionamentoVar;
+
+            // Numero Avvii
+            var numeroAvviiVar = ProfessionalNodeCreator.CreateProfessionalVariable(
+                diagnosticaFolder,
+                "NumeroAvvii",
+                "NumeroAvvii",
+                "Numero Avvii",
+                "Contatore del numero di avvii della riempitrice",
+                DataTypeIds.UInt32,
+                NamespaceIndex,
+                writable: false,
+                defaultValue: (uint)0
+            );
+            variables["NumeroAvvii"] = numeroAvviiVar;
+
+            // Efficienza
+            var efficienzaVar = ProfessionalNodeCreator.CreateProfessionalVariable(
+                diagnosticaFolder,
+                "Efficienza",
+                "Efficienza",
+                "Efficienza Operativa",
+                "Percentuale di efficienza della riempitrice",
+                DataTypeIds.Float,
+                NamespaceIndex,
+                writable: false,
+                unit: "%",
+                minValue: 0.0,
+                maxValue: 100.0,
+                defaultValue: 0.0f
+            );
+            variables["Efficienza"] = efficienzaVar;
+        }
+
+        private ServiceResult OnWriteValue(ISystemContext context, NodeState node, NumericRange indexRange, 
+            QualifiedName dataEncoding, ref object value, ref StatusCode statusCode, ref DateTime timestamp)
         {
             try
             {
@@ -173,6 +334,8 @@ namespace RiempitriceServer.Services
 
                 var browseName = variable.BrowseName.Name;
 
+                Console.WriteLine($"🔧 Scrittura Riempitrice Enhanced: {browseName} = {value}");
+
                 // Applica la modifica in base al tipo di variabile
                 switch (browseName)
                 {
@@ -180,7 +343,7 @@ namespace RiempitriceServer.Services
                         if (value is bool accesa)
                         {
                             riempitrice.Accesa = accesa;
-                            Console.WriteLine($"{riempitrice.Nome} - Accensione: {accesa}");
+                            Console.WriteLine($"✅ {riempitrice.Nome} - Accensione: {accesa}");
                         }
                         break;
 
@@ -188,12 +351,16 @@ namespace RiempitriceServer.Services
                         if (value is string nuovaRicetta && !string.IsNullOrEmpty(nuovaRicetta))
                         {
                             riempitrice.CambiaRicetta(nuovaRicetta);
-                            Console.WriteLine($"{riempitrice.Nome} - Nuova ricetta: {nuovaRicetta}");
+                            Console.WriteLine($"✅ {riempitrice.Nome} - Nuova ricetta: {nuovaRicetta}");
                         }
                         break;
 
-                    default:
-                        return StatusCodes.BadNotWritable;
+                    case "VelocitaRiempimento":
+                        if (value is float velocita)
+                        {
+                            Console.WriteLine($"✅ {riempitrice.Nome} - Velocità riempimento impostata: {velocita} bot/min");
+                        }
+                        break;
                 }
 
                 statusCode = StatusCodes.Good;
@@ -202,7 +369,7 @@ namespace RiempitriceServer.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Errore scrittura: {ex.Message}");
+                Console.WriteLine($"❌ Errore scrittura Riempitrice Enhanced: {ex.Message}");
                 return StatusCodes.BadInternalError;
             }
         }
@@ -213,18 +380,23 @@ namespace RiempitriceServer.Services
             {
                 lock (Lock)
                 {
-                    // Aggiorna i valori di tutti i nodi
+                    // Aggiorna i valori di tutti i nodi della riempitrice
                     UpdateRiempitriceVariable("Stato", (int)riempitrice.Stato);
                     UpdateRiempitriceVariable("RicettaInUso", riempitrice.RicettaInUso);
                     UpdateRiempitriceVariable("ConsumoElettrico", riempitrice.ConsumoElettrico);
                     UpdateRiempitriceVariable("ContatoreBottiglieRiempite", riempitrice.ContatoreBottiglieRiempite);
                     UpdateRiempitriceVariable("Accesa", riempitrice.Accesa);
                     UpdateRiempitriceVariable("RicetteDisponibili", riempitrice.RicetteDisponibili.ToArray());
+
+                    // Aggiorna anche le informazioni diagnostiche
+                    UpdateRiempitriceVariable("TempoFunzionamento", GetTempoFunzionamento());
+                    UpdateRiempitriceVariable("NumeroAvvii", GetNumeroAvvii());
+                    UpdateRiempitriceVariable("Efficienza", GetEfficienza());
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Errore aggiornamento nodi: {ex.Message}");
+                Console.WriteLine($"❌ Errore aggiornamento nodi Riempitrice Enhanced: {ex.Message}");
             }
         }
 
@@ -236,6 +408,30 @@ namespace RiempitriceServer.Services
                 variable.Timestamp = DateTime.UtcNow;
                 variable.ClearChangeMasks(SystemContext, false);
             }
+        }
+
+        private double GetTempoFunzionamento()
+        {
+            // Simulazione del tempo di funzionamento in ore
+            return riempitrice.ContatoreBottiglieRiempite * 0.005; // 0.005 ore per bottiglia
+        }
+
+        private uint GetNumeroAvvii()
+        {
+            // Simulazione del numero di avvii
+            return (uint)(riempitrice.ContatoreBottiglieRiempite / 50); // Un avvio ogni 50 bottiglie
+        }
+
+        private float GetEfficienza()
+        {
+            // Calcola efficienza basata sullo stato
+            return riempitrice.Stato switch
+            {
+                StatoRiempitrice.InFunzione => Random.Shared.NextSingle() * 20.0f + 80.0f, // 80-100%
+                StatoRiempitrice.Accesa => Random.Shared.NextSingle() * 30.0f + 50.0f, // 50-80%
+                StatoRiempitrice.InAllarme => Random.Shared.NextSingle() * 20.0f, // 0-20%
+                _ => 0.0f
+            };
         }
     }
 }
